@@ -2,7 +2,8 @@
 
 import pstats, cProfile
 from database import *
-"""
+from models import Model
+
 i = TextColumn()
 #print i | (i < i) == i
 #print i.__and__(i < i) == i
@@ -64,12 +65,13 @@ def operator_to_sqlalchemy(op, left, right):
 		return left.__or__(right)
 
 #command_to_string_sqlalchemy(stmt)
-"""
+
 class ModelTest(Model):
+	z = TextColumn()
 	x = TextColumn()
+print ("asf")
 
 y = ModelTest(x=12)
 
-print(y._columns[0])
-#print(y.x)
-
+print(y._columns)
+print(str(y))
