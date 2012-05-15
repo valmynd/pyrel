@@ -3,10 +3,13 @@
 # cython: language_level=3
 __author__ = "C.Wilhelm"
 __license__ = "AGPL v3"
+# http://docs.sqlalchemy.org/en/latest/core/schema.html#reflecting-all-tables-at-once
+# follow this: http://www.google-melange.com/gsoc/project/google/gsoc2012/redbrain1123/28002
+from collections import OrderedDict
 
-#from cpython cimport bool
-#cimport expressions
-from copy import copy
+#cdef extern from "object.h":
+#	ctypedef class __builtin__.type [object PyHeapTypeObject]:
+#		pass
 
 cdef extern from "cescape.h":
 	char* escape_html(char* bstr)
@@ -18,14 +21,7 @@ cpdef bytes escape(s):
 		raise MemoryError("String too long")
 	return r
 
-OPERATOR_OR = b" or "
-OPERATOR_AND = b" and "
-OPERATOR_LT = b" < "
-OPERATOR_LE = b" <= "
-OPERATOR_GE = b" >= "
-OPERATOR_GT = b" > "
-OPERATOR_EQ = b" = "
-OPERATOR_NE = b" != "
+opstring_mapping = { "__and__" : " and ", "__or__" : " or ",  "__lt__" : " < ", "__le__" : " <= ", "__ge__" : " >= ", "__ge__" : " > ", "__eq__" : " = ", "__ne__" : " != " }
 
 # _Operand shall contain all operators relevant for Column objects
 cdef class _Operand:
@@ -33,39 +29,26 @@ cdef class _Operand:
 		# because the | operator has the highest operator precedence, the
 		# operators need to be put into brackets, like this: i | (i < i)
 		# thus you can also use i.__or__(i < i)
-		return Expression(OPERATOR_OR, self, other)
+		return Expression("__or__", self, other)
 	def __and__(self, other): # a & b
 		# because the & operator has the highest operator precedence, the
 		# operators need to be put into brackets, like this: i & (i < i)
 		# thus you can also use i.__and__(i < i)
-		return Expression(OPERATOR_AND, self, other)
+		return Expression("__and__", self, other)
 	def __richcmp__(self, other, int operator):
 		# http://docs.cython.org/src/userguide/special_methods.html#rich-comparisons
-		""" # don't remove this, as it may get relevant in later versions of cython:
-			def __lt__(self, other): # a < b
-				return Expression(OPERATOR_LT, self, other)
-			def __le__(self, other): # a <= b
-				return Expression(OPERATOR_LE, self, other)
-			def __ge__(self, other): # a >= b
-				return Expression(OPERATOR_GE, self, other)
-			def __gt__(self, other): # a > b
-				return Expression(OPERATOR_GT, self, other)
-			def __eq__(self, other): # a == b
-				return Expression(OPERATOR_EQ, self, other)
-			def __ne__(self, other): # a != b
-				return Expression(OPERATOR_NE, self, other)"""
 		if operator == 0: # < 0 lt # a < b
-			op = OPERATOR_LT
+			op = "__lt__"
 		elif operator == 1: # <= 1 le # a <= b
-			op = OPERATOR_LE
+			op = "__le__"
 		elif operator == 2: # == 2 eq # a <= b
-			op = OPERATOR_EQ
+			op = "__eq__"
 		elif operator == 3: # != 3 ne # a != b
-			op = OPERATOR_NE
+			op = "__ne__"
 		elif operator == 4: # > 4 gt # a > b
-			op = OPERATOR_GT
+			op = "__gt__"
 		elif operator == 5: # >= 5 ge # a >= b
-			op = OPERATOR_GE
+			op = "__ge__"
 		return Expression(op, self, other)
 
 cdef class Expression(_Operand):
@@ -79,27 +62,7 @@ cdef class Expression(_Operand):
 	def __str__(self):
 		#if isinstance(self._right_operand, _Operand):
 		#print (self._left_operand.__class__.__name__, self._right_operand.__class__.__name__)
-		return "%s%s%s" % (self._left_operand, self._operator, self._right_operand)
-
-""" property-like Interface for Column objects, not visible from python """
-cdef class _Column(_Operand):
-	# readonly doesn't apply for cython-access
-	cdef public _Column _reference # None if this is no ForeignKey
-	cdef readonly unicode _name # assigned via late-binding
-	cdef public object _sqla # may hold backend equivalent
-	def __cinit__(self):
-		pass#self._instantiation_count = xy
-	def __get__(self, instance, owner):
-		# see http://docs.python.org/reference/datamodel.html
-		if instance is None:
-			return owner
-		return owner[self._instantiation_count]
-	def __set__(self, instance, value):
-		instance[self._instantiation_count] = value
-
-cdef class TestColumn(_Column):
-	def __str__(self):
-		return "c"
+		return "%s%s%s" % (self._left_operand, opstring_mapping[self._operator], self._right_operand)
 
 # note on _Command: think of it as prepared statement
 # only the way things are stored should be optimized
@@ -234,3 +197,75 @@ cdef class select(_Command):
 	def offset(self, val = None):
 		self.offset_num = val
 		return self.command_changed()
+
+cdef class ModelMeta(type):
+	@classmethod
+	def __prepare__(metacls, name, bases, **kwargs):
+		return OrderedDict()
+	def __init__(cls, name, bases, attrs):
+		# on introspection, conclude fields / models with language-codes
+		# all this currently doesn't work with cython cdef classes
+		cls._name = attrs.pop("_name", name.lower())
+		cls._columns = []
+		cdef int i = 0
+		for objname, obj in attrs.iteritems():
+			if hasattr(obj, "_instantiation_count"):
+				obj.bind_late(cls, unicode(objname), i)
+				cls._columns.append(obj)
+				i = i + 1
+		type.__init__(cls, name, bases, attrs)
+
+class Model(list, metaclass=ModelMeta):
+	def __init__(self, *args, **kwargs):
+		"""this constructor is meant to be called in order to create per-row objects"""
+		list.__init__(self, args)
+		# can't we do this yet?
+		#for cname, cobj in kwargs.iteritems():
+		#	setattr(self, cname, cobj)
+	def __str__(self):
+		return self._name
+	@classmethod
+	def get(cls, id):
+		"""fetch one row in the name specified by it's primary key guaranteed to be cached
+		shortcut to something like db.tb.select().where(db.tb._pk[0] == 2).fetch(cache=True).pop()
+		id: value of primary-key column to query for, result will be one row as an object of the Model or None
+		note that every call to get() will raise a seperate query to the database, SO DO NOT USE IN LOOPS"""
+		if len(cls._primary_keys) != 1:
+			raise Exception("you can use get() only for tables with one primary key column")
+		# command-string is generated at central place once per connection: ModelMeta.bind_parent()
+		#res = cls._database.query(cls._sql_each, (id,), namespace=cls._name)
+		#if len(res) == 1:
+		#	return cls(res.pop())
+		return None
+
+""" property-like Interface for Column objects, not visible from python """
+cdef class _Column(_Operand):
+	# readonly doesn't apply for cython-access
+	cdef public _Column _reference # None if this is no ForeignKey
+	cdef readonly unicode _name # assigned via late-binding
+	cdef readonly object _model # assigned via late-binding
+	cdef readonly int _instantiation_count # assigned via late-binding
+	cdef public object _sqla # may hold backend equivalent
+	def __cinit__(self):
+		self._instantiation_count = -1
+		self._name = "UNASSIGNED"
+		self._model = None
+	def __get__(self, instance, owner):
+		# see http://docs.python.org/reference/datamodel.html
+		if instance is None:
+			return owner
+		return instance[self._instantiation_count]
+	def __set__(self, instance, value):
+		instance[self._instantiation_count] = value
+	def bind_late(self, object parent, unicode name, int list_position):
+		"""assign a Model object to the column and a name for itself, this usually happens automatically"""
+		self._model = parent
+		self._name = name
+		self._instantiation_count = list_position
+		return self
+	def __str__(self):
+		return self._name
+
+cdef class TextColumn(_Column):
+	pass
+

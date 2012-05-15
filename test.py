@@ -2,8 +2,8 @@
 
 import pstats, cProfile
 from database import *
-
-i = TestColumn()
+"""
+i = TextColumn()
 #print i | (i < i) == i
 #print i.__and__(i < i) == i
 
@@ -13,29 +13,30 @@ y.values("saf", "sf")
 z = delete(y)
 
 
-model = TestColumn()
+model = TextColumn()
 stmt = select().from_(model).where((model == 2) & (model ==3))
 expr = (model == 2) & (model ==3)
 
 import sqlalchemy.sql
-def operator_to_sqlalchemy(op, left, right):
-	# use sqlalchemy equivalences
-	if hasattr(left, "_sqla"):
-		left = left._sqla
-	if hasattr(right, "_sqla"):
-		right = left._sqla
-	# redo operator handling
-	if op == OPERATOR_OR:
-		return left.__or__(right)
-	"""
-	if op == OPERATOR_AND = b" and "
-	if op == OPERATOR_LT = b" < "
-	if op == OPERATOR_LE = b" <= "
-	if op == OPERATOR_GE = b" >= "
-	if op == OPERATOR_GT = b" > "
-	if op == OPERATOR_EQ = b" = "
-	if op == OPERATOR_NE = b" != "
-	"""
+from sqlalchemy import MetaData, create_engine
+engine = create_engine('postgresql://test:123456@localhost/test1', pool_size=5, max_overflow=-1)
+
+# simple test
+connection = engine.connect()
+result = connection.execute("select * from autor")
+# databse introspection
+meta = MetaData()
+meta.reflect(bind=engine)
+#print(meta.tables.keys())
+
+Autor = meta.tables["autor"]
+#print(repr(Autor))
+s = sqlalchemy.sql.Select([Autor.c.nachname]).where(Autor.c.nachname.like("%us"))
+print(getattr(Autor.c.nachname, "like")("%us"))
+#s = s.select_from(meta.tables["buch"])
+result = connection.execute(s)
+print(str(s), result.fetchone())
+connection.close()
 
 def command_to_string_sqlalchemy(cmd):
 	# for this to work, we need
@@ -52,25 +53,23 @@ def command_to_string_sqlalchemy(cmd):
 		having=None
 	)
 
-command_to_string_sqlalchemy(stmt)
+def operator_to_sqlalchemy(op, left, right):
+	# use sqlalchemy equivalences
+	if hasattr(left, "_sqla"):
+		left = left._sqla
+	if hasattr(right, "_sqla"):
+		right = left._sqla
+	# redo operator handling
+	if op == OPERATOR_OR:
+		return left.__or__(right)
 
+#command_to_string_sqlalchemy(stmt)
 """
-from collections import OrderedDict
+class ModelTest(Model):
+	x = TextColumn()
 
-class ModelMeta(type):
-	@classmethod
-	def __prepare__(metacls, name, bases, **kwargs):
-		return OrderedDict()
-	def __new__(cls, name, bases, classdict):
-		result = type.__new__(cls, name, bases, dict(classdict))
-		result._members = tuple(classdict)
-		return result
+y = ModelTest(x=12)
 
-class Model(metaclass=ModelMeta):
-	def one(self): pass
-	def two(self): pass
-	def three(self): pass
-	def four(self): pass
+print(y._columns[0])
+#print(y.x)
 
-print(Model._members)
-"""
