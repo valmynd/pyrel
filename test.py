@@ -26,10 +26,9 @@ engine = create_engine('postgresql://test:123456@localhost/test1', pool_size=5, 
 connection = engine.connect()
 result = connection.execute("select * from autor")
 # databse introspection
-meta = MetaData()
-meta.reflect(bind=engine)
-#print(meta.tables.keys())
 
+#print(meta.tables.keys())
+'''
 Autor = meta.tables["autor"]
 #print(repr(Autor))
 s = sqlalchemy.sql.Select([Autor.c.nachname]).where(Autor.c.nachname.like("%us"))
@@ -38,6 +37,19 @@ print(getattr(Autor.c.nachname, "like")("%us"))
 result = connection.execute(s)
 print(str(s), result.fetchone())
 connection.close()
+'''
+"""create objects using sqlalchemy's reflection; attribute is what is returned by create_engine()"""
+def introspect_sqlalchemy(engine):
+	meta = MetaData()
+	meta.reflect(bind=engine)
+	for table in meta.sorted_tables:
+		print table.columns
+		for pk in table.primary_key:
+			print pk
+		for fkey in table.foreign_keys:
+			print fkey
+		#m = type(table.name, (Model,), columns_dict)
+introspect_sqlalchemy(engine)
 
 def command_to_string_sqlalchemy(cmd):
 	# for this to work, we need
@@ -65,7 +77,7 @@ def operator_to_sqlalchemy(op, left, right):
 		return left.__or__(right)
 
 #command_to_string_sqlalchemy(stmt)
-
+'''
 class ModelTest(Model):
 	z = TextColumn()
 	x = TextColumn()
@@ -75,3 +87,4 @@ y = ModelTest(x=12)
 
 print(y._columns)
 print(str(y))
+'''

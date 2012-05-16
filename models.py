@@ -1,8 +1,14 @@
+# -*- coding: utf-8 -*-
+
 # writing metaclasses in cython led to segfaults
 # TODO: try with newer versions of cython (last tried with 0.14.x)
 __author__ = "C.Wilhelm"
 __license__ = "AGPL v3"
 
+
+#j2ee spring struts jaxb 10h/woche für 8.56€/h = 372€/M
+#Praktikum im Umfang von 30 ECTS; 3SHK; 1.6
+# christoph.jobst@studserv.uni-leipzig.de
 class ModelMeta(type):
 	@classmethod
 	def __prepare__(metacls, name, bases, **kwargs):
@@ -11,6 +17,7 @@ class ModelMeta(type):
 		# on introspection, conclude fields / models with language-codes
 		# all this currently doesn't work with cython cdef classes
 		cls._name = attrs.pop("_name", name.lower())
+		cls._sqla = attrs.pop("_sqla", name.lower())
 		cls._columns = []
 		i = 0
 		for objname, obj in attrs.iteritems():

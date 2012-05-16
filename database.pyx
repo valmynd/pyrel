@@ -116,7 +116,7 @@ cdef class _Command:
 				self.values_commit = other.values_commit[:]
 				self.values_where = other.values_where[:]
 				self.values_having = other.values_having[:]
-				self.where_expr = other.where_expr
+				self.where_expr = other.where_expr # evtl: deep-copy needed, e.g. if values change?
 				self.having_expr = other.having_expr
 				self.offset_num = other.offset_num
 				self.limit_num = other.limit_num
