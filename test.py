@@ -35,7 +35,7 @@ def introspect_sqlalchemy(engine):
 		newcolumns_dict = {} # will be used as parameter for type()
 		for c in table.columns:
 			# get the table related by a foreign key: list(employees.c.employee_dept.foreign_keys)[0].column.table
-			#print c.name, c.nullable, c.primary_key, c.foreign_keys
+			#print c.name, c.unique, c.nullable, c.primary_key, c.foreign_keys
 			## Adapt types
 			coltype_name = c.type.__class__.__name__.lower()
 			if "int" in coltype_name:
@@ -46,7 +46,7 @@ def introspect_sqlalchemy(engine):
 				# decimal is exactly as precise as declared, while numeric is at least as precise as declared
 				print "=========== not handled in introspect_sqlalchemy(): ", coltype_name
 				columnclass = TextColumn
-			columnobject = columnclass().not_null(not c.nullable)
+			columnobject = columnclass().not_null(not c.nullable).unique(c.unique)
 			## Adapt PrimaryKey/ForeinKey
 			if c.primary_key:
 				columnobject = PrimaryKey(columnobject)
@@ -104,7 +104,6 @@ expr = (model == 2) & (model ==3)
 class ModelTest(Model):
 	z = TextColumn()
 	x = TextColumn()
-print ("asf")
 
 y = ModelTest(x=12)
 

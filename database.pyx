@@ -6,6 +6,7 @@ __license__ = "AGPL v3"
 # http://docs.sqlalchemy.org/en/latest/core/schema.html#reflecting-all-tables-at-once
 # follow this: http://www.google-melange.com/gsoc/project/google/gsoc2012/redbrain1123/28002
 from collections import OrderedDict
+from cpython cimport bool
 
 #cdef extern from "object.h":
 #	ctypedef class __builtin__.type [object PyHeapTypeObject]:
@@ -207,7 +208,8 @@ cdef class _Column(_Operand):
 	cdef readonly int _instantiation_count # assigned via late-binding
 	cdef public object _sqla # may hold backend equivalent
 	cdef public object _default # default value to fallback to
-	cdef public object _nullable # set via not_null() ?
+	cdef public bool _nullable # set via not_null()
+	cdef public bool _unique # set via unique()
 	def __cinit__(self):
 		self._instantiation_count = -1
 		self._name = "UNASSIGNED"
@@ -237,6 +239,11 @@ cdef class _Column(_Operand):
 	def not_null(self, not_null = True):
 		self._nullable = not not_null
 		return self
+	def unique(self, unique = True):
+		if unique:
+			print "==== unique spotted:", unique
+		self._unique = unique
+		return self
 	def __str__(self):
 		return self._name
 	def __repr__(self):
@@ -261,5 +268,14 @@ cdef class DatetimeColumn(_Column):
 cdef class PrimaryKey(_Column):
 	pass
 cdef class ForeignKey(_Column):
-	pass
-
+	def __init__(self, reference, on_delete = "cascade"):
+		_Column.__init__(self)
+		# reference: either the referenced Model or it's primary-key-object (will be the latter afterwards)
+		self._reference_on_delete = on_delete.lower() # cascade, delete, set null, set default
+		self._reference = reference # will contain the pk-column of the referenced table, handled via finalize()
+		#self._refsamenames = False # handled in finalize()
+		#self._choices = None
+		#self._renderclass = ComboBox
+	def __repr__(self):
+		rstr = BaseColumn.__repr__(self)
+		return rstr.replace(">", " references %s>" % str(self._reference))
