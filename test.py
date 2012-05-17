@@ -4,31 +4,19 @@ import pstats, cProfile
 from database import *
 from models import Model
 
-i = TextColumn()
-#print i | (i < i) == i
-#print i.__and__(i < i) == i
-
-x = select()
-y = update(x)
-y.values("saf", "sf")
-z = delete(y)
-
-
-model = TextColumn()
-stmt = select().from_(model).where((model == 2) & (model ==3))
-expr = (model == 2) & (model ==3)
 
 import sqlalchemy.sql
 from sqlalchemy import MetaData, create_engine
 engine = create_engine('postgresql://test:123456@localhost/test1', pool_size=5, max_overflow=-1)
 
+'''
 # simple test
 connection = engine.connect()
 result = connection.execute("select * from autor")
 # databse introspection
 
 #print(meta.tables.keys())
-'''
+
 Autor = meta.tables["autor"]
 #print(repr(Autor))
 s = sqlalchemy.sql.Select([Autor.c.nachname]).where(Autor.c.nachname.like("%us"))
@@ -42,13 +30,34 @@ connection.close()
 def introspect_sqlalchemy(engine):
 	meta = MetaData()
 	meta.reflect(bind=engine)
+	newmodels_dict = {} # will be returned
 	for table in meta.sorted_tables:
-		print table.columns
-		for pk in table.primary_key:
-			print pk
-		for fkey in table.foreign_keys:
-			print fkey
-		#m = type(table.name, (Model,), columns_dict)
+		newcolumns_dict = {} # will be used as parameter for type()
+		for c in table.columns:
+			# get the table related by a foreign key: list(employees.c.employee_dept.foreign_keys)[0].column.table
+			#print c.name, c.nullable, c.primary_key, c.foreign_keys
+			## Adapt types
+			coltype_name = c.type.__class__.__name__.lower()
+			if "int" in coltype_name:
+				columnclass = IntegerColumn
+			elif "char" in coltype_name or "string" in coltype_name or "unicode" in coltype_name:
+				columnclass = TextColumn
+			else: # TODO / raise NotImplementedError
+				# decimal is exactly as precise as declared, while numeric is at least as precise as declared
+				print "=========== not handled in introspect_sqlalchemy(): ", coltype_name
+				columnclass = TextColumn
+			columnobject = columnclass().not_null(not c.nullable)
+			## Adapt PrimaryKey/ForeinKey
+			if c.primary_key:
+				columnobject = PrimaryKey(columnobject)
+			if c.foreign_keys:
+				assert(len(c.foreign_keys) == 1)
+				pkcol = c.foreign_keys.pop().column
+				print getattr(newmodels_dict[pkcol.table.name], pkcol.name)
+			newcolumns_dict[c.name] = columnobject
+		newmodel = type(str(table.name), (Model,), newcolumns_dict)
+		newmodels_dict[table.name] = newmodel
+	return newmodels_dict
 introspect_sqlalchemy(engine)
 
 def command_to_string_sqlalchemy(cmd):
@@ -78,6 +87,20 @@ def operator_to_sqlalchemy(op, left, right):
 
 #command_to_string_sqlalchemy(stmt)
 '''
+
+i = TextColumn()
+#print i | (i < i) == i
+#print i.__and__(i < i) == i
+
+x = select()
+y = update(x)
+y.values("saf", "sf")
+z = delete(y)
+model = TextColumn()
+stmt = select().from_(model).where((model == 2) & (model ==3))
+expr = (model == 2) & (model ==3)
+'''
+
 class ModelTest(Model):
 	z = TextColumn()
 	x = TextColumn()
@@ -87,4 +110,3 @@ y = ModelTest(x=12)
 
 print(y._columns)
 print(str(y))
-'''

@@ -207,6 +207,7 @@ cdef class _Column(_Operand):
 	cdef readonly int _instantiation_count # assigned via late-binding
 	cdef public object _sqla # may hold backend equivalent
 	cdef public object _default # default value to fallback to
+	cdef public object _nullable # set via not_null() ?
 	def __cinit__(self):
 		self._instantiation_count = -1
 		self._name = "UNASSIGNED"
@@ -233,11 +234,32 @@ cdef class _Column(_Operand):
 		#if self._default is None:
 		#	raise Exception("There is no default Value for %s" % self._name)
 		return self._default
+	def not_null(self, not_null = True):
+		self._nullable = not not_null
+		return self
 	def __str__(self):
 		return self._name
 	def __repr__(self):
 		return "<%s %s.%s>" % (self.__class__.__name__, self._model._name, self._name)
 
 cdef class TextColumn(_Column):
+	pass
+cdef class BooleanColumn(_Column):
+	pass
+cdef class IntegerColumn(_Column):
+	pass
+cdef class FloatColumn(_Column):
+	pass
+cdef class DecimalColumn(_Column):
+	pass
+cdef class DateColumn(_Column):
+	pass
+cdef class TimeColumn(_Column):
+	pass
+cdef class DatetimeColumn(_Column):
+	pass
+cdef class PrimaryKey(_Column):
+	pass
+cdef class ForeignKey(_Column):
 	pass
 

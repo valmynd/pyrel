@@ -5,10 +5,6 @@
 __author__ = "C.Wilhelm"
 __license__ = "AGPL v3"
 
-
-#j2ee spring struts jaxb 10h/woche für 8.56€/h = 372€/M
-#Praktikum im Umfang von 30 ECTS; 3SHK; 1.6
-# christoph.jobst@studserv.uni-leipzig.de
 class ModelMeta(type):
 	@classmethod
 	def __prepare__(metacls, name, bases, **kwargs):
