@@ -52,8 +52,9 @@ def introspect_sqlalchemy(engine):
 				columnobject = PrimaryKey(columnobject)
 			if c.foreign_keys:
 				assert(len(c.foreign_keys) == 1)
-				pkcol = c.foreign_keys.pop().column
-				print getattr(newmodels_dict[pkcol.table.name], pkcol.name)
+				pkcol_sqla = c.foreign_keys.pop().column
+				pkcol_pyrel = getattr(newmodels_dict[pkcol_sqla.table.name], pkcol_sqla.name)
+				columnobject = ForeignKey(pkcol_pyrel)
 			newcolumns_dict[c.name] = columnobject
 		newmodel = type(str(table.name), (Model,), newcolumns_dict)
 		newmodels_dict[table.name] = newmodel
@@ -107,5 +108,5 @@ class ModelTest(Model):
 
 y = ModelTest(x=12)
 
-print(y._columns)
-print(str(y))
+#print(y._columns)
+print(repr(ModelTest.x))

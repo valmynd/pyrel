@@ -20,7 +20,6 @@ class ModelMeta(type):
 			if hasattr(obj, "_instantiation_count"):
 				obj.bind_late(cls, unicode(objname), i)
 				cls._columns.append(obj)
-				setattr(cls, objname, obj)
 				i = i + 1
 		type.__init__(cls, name, bases, attrs)
 

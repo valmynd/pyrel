@@ -141,7 +141,7 @@ cdef class _Command:
 		if columns:
 			self.relevant_columns = [] # emptied before appending
 			for col in columns:
-				if hasattr(col, "_reference"):
+				if hasattr(col, "_instantiation_count"): # is _Column
 					self.relevant_columns.append(col)
 				elif hasattr(col, "relevant_columns"): # maybe move this to select.from_(), handling joins there
 					self.relevant_columns += col._columns
@@ -202,7 +202,6 @@ cdef class select(_Command):
 """ property-like Interface for Column objects, not visible from python """
 cdef class _Column(_Operand):
 	# readonly doesn't apply for cython-access
-	cdef public _Column _reference # None if this is no ForeignKey
 	cdef readonly unicode _name # assigned via late-binding
 	cdef readonly object _model # assigned via late-binding
 	cdef readonly int _instantiation_count # assigned via late-binding
@@ -218,7 +217,7 @@ cdef class _Column(_Operand):
 	def __get__(self, instance, owner):
 		# see http://docs.python.org/reference/datamodel.html
 		if instance is None:
-			return owner
+			return self
 		return instance[self._instantiation_count]
 	def __set__(self, instance, value):
 		instance[self._instantiation_count] = value
@@ -241,7 +240,7 @@ cdef class _Column(_Operand):
 		return self
 	def unique(self, unique = True):
 		if unique:
-			print "==== unique spotted:", unique
+			print("==== unique spotted:", unique)
 		self._unique = unique
 		return self
 	def __str__(self):
@@ -268,6 +267,8 @@ cdef class DatetimeColumn(_Column):
 cdef class PrimaryKey(_Column):
 	pass
 cdef class ForeignKey(_Column):
+	cdef readonly _Column _reference
+	cdef readonly unicode _reference_on_delete
 	def __init__(self, reference, on_delete = "cascade"):
 		_Column.__init__(self)
 		# reference: either the referenced Model or it's primary-key-object (will be the latter afterwards)
@@ -277,5 +278,5 @@ cdef class ForeignKey(_Column):
 		#self._choices = None
 		#self._renderclass = ComboBox
 	def __repr__(self):
-		rstr = BaseColumn.__repr__(self)
+		rstr = _Column.__repr__(self)
 		return rstr.replace(">", " references %s>" % str(self._reference))
