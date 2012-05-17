@@ -28,16 +28,18 @@ connection.close()
 '''
 """create objects using sqlalchemy's reflection; attribute is what is returned by create_engine()"""
 def introspect_sqlalchemy(engine):
+	# fun: http://www.incurlybraces.com/convert-underscored-names-camel-case-python.html
+	# may have a method that does just that, if someone wants it
 	meta = MetaData()
 	meta.reflect(bind=engine)
 	newmodels_dict = {} # will be returned
 	for table in meta.sorted_tables:
 		newcolumns_dict = {} # will be used as parameter for type()
-		for c in table.columns:
+		for column_sqla in table.columns:
 			# get the table related by a foreign key: list(employees.c.employee_dept.foreign_keys)[0].column.table
 			#print c.name, c.unique, c.nullable, c.primary_key, c.foreign_keys
 			## Adapt types
-			coltype_name = c.type.__class__.__name__.lower()
+			coltype_name = column_sqla.type.__class__.__name__.lower()
 			if "int" in coltype_name:
 				columnclass = IntegerColumn
 			elif "char" in coltype_name or "string" in coltype_name or "unicode" in coltype_name:
@@ -46,47 +48,58 @@ def introspect_sqlalchemy(engine):
 				# decimal is exactly as precise as declared, while numeric is at least as precise as declared
 				print "=========== not handled in introspect_sqlalchemy(): ", coltype_name
 				columnclass = TextColumn
-			columnobject = columnclass().not_null(not c.nullable).unique(c.unique)
+			columnobject = columnclass()
 			## Adapt PrimaryKey/ForeinKey
-			if c.primary_key:
+			if column_sqla.primary_key:
 				columnobject = PrimaryKey(columnobject)
-			if c.foreign_keys:
-				assert(len(c.foreign_keys) == 1)
-				pkcol_sqla = c.foreign_keys.pop().column
+			if column_sqla.foreign_keys:
+				assert(len(column_sqla.foreign_keys) == 1) # wonder why every column stores a set() of foreign_keys in sqlalchemy??
+				pkcol_sqla = column_sqla.foreign_keys.pop().column
 				pkcol_pyrel = getattr(newmodels_dict[pkcol_sqla.table.name], pkcol_sqla.name)
 				columnobject = ForeignKey(pkcol_pyrel)
-			newcolumns_dict[c.name] = columnobject
+			## Adapt further attributes
+			columnobject.not_null(not column_sqla.nullable)
+			columnobject.unique(column_sqla.unique)
+			columnobject._sqla = column_sqla
+			newcolumns_dict[column_sqla.name] = columnobject
 		newmodel = type(str(table.name), (Model,), newcolumns_dict)
 		newmodels_dict[table.name] = newmodel
+		newmodel._sqla = table
 	return newmodels_dict
-introspect_sqlalchemy(engine)
+models = introspect_sqlalchemy(engine)
+#print repr(models["buch"])
+#print repr(models["buch"]())
+
+def operator_to_sqlalchemy(expr):
+	# use sqlalchemy equivalences
+	left = expr._left_operand
+	right = expr._right_operand
+	if hasattr(left, "_sqla"):
+		left = left._sqla
+	if hasattr(right, "_sqla"):
+		right = right._sqla
+	# execute operator in sqlalchemy
+	return getattr(left, expr._operator)(right)
+stmt = "saf" == models["buch"].titel
+print operator_to_sqlalchemy(stmt)
 
 def command_to_string_sqlalchemy(cmd):
 	# for this to work, we need
 	#  * sqlalchemy equivalent for _Column
 	#  * sqlalchemy equivalent for fromclause, whereclause
+	where_clause = None
 	if cmd.where_expr:
-		# need mapping, e.g. m[OPERATOR_GE] to return "__ge__"
-		print cmd.where_expr
+		where_clause = operator_to_sqlalchemy(cmd.where_expr)
 	stmt = sqlalchemy.sql.Select(
 		columns = [],
-		whereclause=None,
+		whereclause=where_clause,
 		from_obj=None,
 		distinct=False,
 		having=None
 	)
-
-def operator_to_sqlalchemy(op, left, right):
-	# use sqlalchemy equivalences
-	if hasattr(left, "_sqla"):
-		left = left._sqla
-	if hasattr(right, "_sqla"):
-		right = left._sqla
-	# redo operator handling
-	if op == OPERATOR_OR:
-		return left.__or__(right)
-
-#command_to_string_sqlalchemy(stmt)
+	return stmt
+stmt = select(models["buch"]).where("saf" == models["buch"].titel)
+print command_to_string_sqlalchemy(stmt)
 '''
 
 i = TextColumn()

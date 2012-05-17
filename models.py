@@ -22,6 +22,10 @@ class ModelMeta(type):
 				cls._columns.append(obj)
 				i = i + 1
 		type.__init__(cls, name, bases, attrs)
+	def __repr__(self):
+		return "<Model %s>" % (self._name)
+	def __str__(self):
+		return self._name
 
 class Model(list): # (list, metaclass=ModelMeta):
 	__metaclass__ = ModelMeta

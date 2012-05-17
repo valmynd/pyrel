@@ -5,9 +5,7 @@ __author__ = "C.Wilhelm"
 __license__ = "AGPL v3"
 # http://docs.sqlalchemy.org/en/latest/core/schema.html#reflecting-all-tables-at-once
 # follow this: http://www.google-melange.com/gsoc/project/google/gsoc2012/redbrain1123/28002
-from collections import OrderedDict
 from cpython cimport bool
-
 #cdef extern from "object.h":
 #	ctypedef class __builtin__.type [object PyHeapTypeObject]:
 #		pass
@@ -209,11 +207,13 @@ cdef class _Column(_Operand):
 	cdef public object _default # default value to fallback to
 	cdef public bool _nullable # set via not_null()
 	cdef public bool _unique # set via unique()
+	cdef public _Column _representative # set via representative()
 	def __cinit__(self):
 		self._instantiation_count = -1
 		self._name = "UNASSIGNED"
 		self._model = None
 		self._default = None
+		self._nullable = True
 	def __get__(self, instance, owner):
 		# see http://docs.python.org/reference/datamodel.html
 		if instance is None:
@@ -232,7 +232,7 @@ cdef class _Column(_Operand):
 		if value is not None:
 			self._default = value
 			return self
-		#if self._default is None:
+		#if self._default is None and not self._nullable: # FIXME: will complain for primary keys!
 		#	raise Exception("There is no default Value for %s" % self._name)
 		return self._default
 	def not_null(self, not_null = True):
@@ -240,8 +240,12 @@ cdef class _Column(_Operand):
 		return self
 	def unique(self, unique = True):
 		if unique:
-			print("==== unique spotted:", unique)
+			print("==== unique spotted:", self)
 		self._unique = unique
+		return self
+	def representative(self, representative = True):
+		"""set whether this column shall be used to represent the object, e.g. in a ComboBox"""
+		self._representative = representative
 		return self
 	def __str__(self):
 		return self._name
