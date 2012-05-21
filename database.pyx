@@ -3,6 +3,7 @@
 # cython: language_level=3
 __author__ = "C.Wilhelm"
 __license__ = "AGPL v3"
+# read this: http://effbot.org/zone/simple-top-down-parsing.htm
 # http://docs.sqlalchemy.org/en/latest/core/schema.html#reflecting-all-tables-at-once
 # follow this: http://www.google-melange.com/gsoc/project/google/gsoc2012/redbrain1123/28002
 from cpython cimport bool
@@ -11,7 +12,7 @@ from cpython cimport bool
 #		pass
 
 cdef extern from "cescape.h":
-	char* escape_html(char* bstr)
+	char* escape_html(char*)
 cpdef bytes escape(s):
 	if isinstance(s, unicode):
 		s = s.encode('UTF-8') # seems pretty fast: 0.20 vs 0.25 seconds
@@ -19,6 +20,12 @@ cpdef bytes escape(s):
 	if r == NULL:
 		raise MemoryError("String too long")
 	return r
+
+# testing extensions
+cdef extern from "dicttest.h":
+	int test(dict)
+cpdef test_test(dict x):
+	test(x)
 
 opstring_mapping = { "__and__" : " and ", "__or__" : " or ",  "__lt__" : " < ", "__le__" : " <= ", "__ge__" : " >= ", "__ge__" : " > ", "__eq__" : " = ", "__ne__" : " != " }
 
@@ -49,6 +56,30 @@ cdef class _Operand:
 		elif operator == 5: # >= 5 ge # a >= b
 			op = "__ge__"
 		return Expression(op, self, other)
+
+# _Model is a Baseclass for Model (can't apply Metaclass within Cython classes, yet)
+cdef class _Model(list):
+	def __init__(self, *args, **kwargs):
+		"""this constructor is meant to be called in order to create per-row objects
+		tuples can be converted into Model objects just like this: Model(*result.fetchone())
+		when creating Model objects are created manually, this syntax might be preferred: Model(col="afs")
+		you can't mix those, e.g. Model("asf", "saf", x="saf") won't work"""
+		if args: # fast, but there are some rules -> set __debug__ = False when benchmarking
+			assert(len(kwargs) == 0)
+			assert(len(args) == len(self._columns))
+			list.__init__(self, args)
+			return
+		# if not all attributes are set, assign default values
+		list.__init__(self, [kwargs.pop(c._name, c.default()) for c in self._columns])
+	# operators for Model Objects (Aggregations, Joins?)
+	def sum(self):
+		return Expression("__sum__", self, None)
+	def min(self):
+		return Expression("__min__", self, None)
+	def avg(self):
+		return Expression("__avg_", self, None)
+	#def count(self, distinct = False):
+	#	return Expression("__count__", self, None)
 
 cdef class Expression(_Operand):
 	cdef public object _operator
@@ -136,12 +167,14 @@ cdef class _Command:
 		# use this method to redefine relevant_columns after creation of Command object
 		# force relevant_columns to concist of Column/Table/Aggregation objects
 		# return relevant_columns if no parameters are given
+		print(columns)
 		if columns:
 			self.relevant_columns = [] # emptied before appending
 			for col in columns:
+				print ("AIHS")
 				if hasattr(col, "_instantiation_count"): # is _Column
 					self.relevant_columns.append(col)
-				elif hasattr(col, "relevant_columns"): # maybe move this to select.from_(), handling joins there
+				elif hasattr(col, "_columns"): # maybe move this to select.from_(), handling joins there
 					self.relevant_columns += col._columns
 				else: # TODO: Aggregations
 					raise TypeError("As of yet, only Column- and Model objects are allowed in append_columns()")

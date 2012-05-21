@@ -5,6 +5,8 @@
 __author__ = "C.Wilhelm"
 __license__ = "AGPL v3"
 
+from database import _Model
+
 class ModelMeta(type):
 	@classmethod
 	def __prepare__(metacls, name, bases, **kwargs):
@@ -27,21 +29,8 @@ class ModelMeta(type):
 	def __str__(self):
 		return self._name
 
-class Model(list): # (list, metaclass=ModelMeta):
+class Model(_Model): # (list, metaclass=ModelMeta):
 	__metaclass__ = ModelMeta
-	def __init__(self, *args, **kwargs):
-		"""this constructor is meant to be called in order to create per-row objects
-		tuples can be converted into Model objects just like this: Model(*result.fetchone())
-		when creating Model objects are created manually, this syntax might be preferred: Model(col="afs")
-		you can't mix those, e.g. Model("asf", "saf", x="saf") won't work"""
-		if args: # fast, but there are some rules -> set __debug__ = False when benchmarking
-			assert(len(kwargs) == 0)
-			assert(len(args) == len(self._columns))
-			list.__init__(self, args)
-			return
-		# if not all attributes are set, assign default values
-		#tmp = [0]*len(self._columns) # initial size
-		list.__init__(self, [kwargs.pop(c._name, c.default()) for c in self._columns])
 	def __str__(self):
 		return self._name
 	@classmethod

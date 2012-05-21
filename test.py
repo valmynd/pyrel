@@ -3,13 +3,13 @@
 import pstats, cProfile
 from database import *
 from models import Model
-
+'''
 
 import sqlalchemy.sql
 from sqlalchemy import MetaData, create_engine
 engine = create_engine('postgresql://test:123456@localhost/test1', pool_size=5, max_overflow=-1)
 
-'''
+
 # simple test
 connection = engine.connect()
 result = connection.execute("select * from autor")
@@ -25,7 +25,7 @@ print(getattr(Autor.c.nachname, "like")("%us"))
 result = connection.execute(s)
 print(str(s), result.fetchone())
 connection.close()
-'''
+
 """create objects using sqlalchemy's reflection; attribute is what is returned by create_engine()"""
 def introspect_sqlalchemy(engine):
 	# fun: http://www.incurlybraces.com/convert-underscored-names-camel-case-python.html
@@ -80,8 +80,8 @@ def operator_to_sqlalchemy(expr):
 		right = right._sqla
 	# execute operator in sqlalchemy
 	return getattr(left, expr._operator)(right)
-stmt = "saf" == models["buch"].titel
-print operator_to_sqlalchemy(stmt)
+#stmt = "saf" == models["buch"].titel
+#print operator_to_sqlalchemy(stmt)
 
 def command_to_string_sqlalchemy(cmd):
 	# for this to work, we need
@@ -90,8 +90,9 @@ def command_to_string_sqlalchemy(cmd):
 	where_clause = None
 	if cmd.where_expr:
 		where_clause = operator_to_sqlalchemy(cmd.where_expr)
+	#assert(len(cmd.relevant_columns) > 0)
 	stmt = sqlalchemy.sql.Select(
-		columns = [],
+		columns = [rc._sqla for rc in cmd.relevant_columns],
 		whereclause=where_clause,
 		from_obj=None,
 		distinct=False,
@@ -99,8 +100,11 @@ def command_to_string_sqlalchemy(cmd):
 	)
 	return stmt
 stmt = select(models["buch"]).where("saf" == models["buch"].titel)
-print command_to_string_sqlalchemy(stmt)
-'''
+#connection = engine.connect()
+#stmt = command_to_string_sqlalchemy(stmt)
+#result = connection.execute(stmt)
+#print(str(stmt), result.fetchone())
+
 
 i = TextColumn()
 #print i | (i < i) == i
@@ -113,7 +117,6 @@ z = delete(y)
 model = TextColumn()
 stmt = select().from_(model).where((model == 2) & (model ==3))
 expr = (model == 2) & (model ==3)
-'''
 
 class ModelTest(Model):
 	z = TextColumn()
@@ -122,4 +125,6 @@ class ModelTest(Model):
 y = ModelTest(x=12)
 
 #print(y._columns)
-print(repr(ModelTest.x))
+#print(repr(ModelTest.x))
+'''
+test_test({124:"asf", "ohf":"asf"})

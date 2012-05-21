@@ -4,5 +4,5 @@ from Cython.Distutils import build_ext
 
 setup(
     cmdclass = {'build_ext': build_ext},
-    ext_modules = [Extension("database", ["database.pyx", "cescape.c"])]
+    ext_modules = [Extension("database", ["database.pyx", "cescape.c", "dicttest.c"])]
 )
