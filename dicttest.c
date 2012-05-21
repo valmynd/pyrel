@@ -12,8 +12,8 @@ int test(const PyObject *dict) {
 		/* begin print attrs */
 		char *keytype = (char*)key->ob_type->tp_name;
 		char *valtype = (char*)value->ob_type->tp_name;
-		PyObject *keystr = PyObject_Bytes(key); /* equivalent to str(o) in python */
-		PyObject *valstr = PyObject_Bytes(value); /* may call o.__str__() */
+		PyObject *keystr = PyObject_Bytes(key); /* equivalent to str(o) in python ... */
+		PyObject *valstr = PyObject_Bytes(value); /* ... thus it may call o.__str__() */
 		/* the returned pointer of PyBytes_AsString(o) refers to the internal buffer of o, not a copy. The data must not be modified in any way,
 			it must not be deallocated: http://docs.python.org/release/3.0.1/c-api/bytes.html#PyBytes_AsString */
 		printf("Key Type: %s Key String: %s - Value Type: %s Value String: %s\n", keytype, PyBytes_AsString(keystr), valtype, PyBytes_AsString(valstr));
