@@ -15,15 +15,26 @@ class ModelMeta(type):
 		# on introspection, conclude fields / models with language-codes
 		# all this currently doesn't work with cython cdef classes
 		cls._name = attrs.pop("_name", name.lower())
-		cls._sqla = attrs.pop("_sqla", name.lower())
+		cls._sqla = attrs.pop("_sqla", None) # maybe do some backend introspection
+		cls._database = attrs.pop("_database", None) # fixme: call bind_parent
 		cls._columns = []
 		i = 0
 		for objname, obj in attrs.iteritems():
 			if hasattr(obj, "_instantiation_count"):
-				obj.bind_late(cls, unicode(objname), i)
+				obj.bind_parent(cls, unicode(objname), i)
 				cls._columns.append(obj)
 				i = i + 1
 		type.__init__(cls, name, bases, attrs)
+	def bind_parent(cls, parent):
+		# called from within Database.sync(), Database.bind_models()
+		cls._database = parent
+		# add itself to _tables and _table_names
+		parent._models.append(cls)
+		# make it accessible as attribute # FIXME: won't work, as Database is a cdef class
+		#setattr(parent, cls._name, cls)
+		# TODO: prepare sql_each and sql_populate
+		#if len(cls._translated) > 0:# TODO: same behaviour in introspect
+		return cls
 	def __repr__(self):
 		return "<Model %s>" % (self._name)
 	def __str__(self):
@@ -33,6 +44,10 @@ class Model(_Model): # (list, metaclass=ModelMeta):
 	__metaclass__ = ModelMeta
 	def __str__(self):
 		return self._name
+	#@classmethod
+	#def new(cls, name, *column_objects):
+	# need an alternative way not using metaclass,thus preferred way to spawn new models in cython
+	# problem: distinguishing between model class (e.g. table) and model object (e.g. row)
 	@classmethod
 	def get(cls, id):
 		"""fetch one row in the name specified by it's primary key guaranteed to be cached

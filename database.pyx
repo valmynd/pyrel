@@ -58,12 +58,25 @@ cdef class _Operand:
 			op = "__ge__"
 		return Expression(op, self, other)
 
+cdef class Expression(_Operand):
+	cdef public object _operator
+	cdef public object _left_operand
+	cdef public object _right_operand
+	def __init__(self, t, left_operand, right_operand):
+		self._operator = t
+		self._left_operand = left_operand
+		self._right_operand = right_operand
+	def __str__(self):
+		#if isinstance(self._right_operand, _Operand):
+		#print (self._left_operand.__class__.__name__, self._right_operand.__class__.__name__)
+		return "%s%s%s" % (self._left_operand, opstring_mapping[self._operator], self._right_operand)
+
 # _Model is a Baseclass for Model (can't apply Metaclass within Cython classes, yet)
 cdef class _Model(list):
 	def __init__(self, *args, **kwargs):
 		"""this constructor is meant to be called in order to create per-row objects
 		tuples can be converted into Model objects just like this: Model(*result.fetchone())
-		when creating Model objects are created manually, this syntax might be preferred: Model(col="afs")
+		when creating Model objects manually, this syntax might be preferred: Model(col="afs")
 		you can't mix those, e.g. Model("asf", "saf", x="saf") won't work"""
 		if args: # fast, but there are some rules -> set __debug__ = False when benchmarking
 			assert(not kwargs)
@@ -71,12 +84,10 @@ cdef class _Model(list):
 			list.__init__(self, args)
 			return
 		# if not all attributes are set, assign default values
-		# http://trac.sagemath.org/sage_trac/attachment/ticket/12029/trac12029_clonable_int_array_2_list.patch
 		cdef int i = 0
 		cdef list L = <list> PyList_New(len(self._columns)) # avoid reallocation this way
 		for c in self._columns:
-			# L[i] = ... led to segfaults as it translated to bs like Py_DECREF(PyList_GET_ITEM(o, i));
-			# PyList_SET_ITEM is used to fill in new lists where there is no previous content (see docs)
+			# PyList_SET_ITEM is used to fill in new lists where there is no previous content
 			PyList_SET_ITEM(L, i, kwargs.pop(c._name, c.default()))
 			i = i+1
 		list.__init__(self, L)
@@ -90,18 +101,35 @@ cdef class _Model(list):
 	#def count(self, distinct = False):
 	#	return Expression("__count__", self, None)
 
-cdef class Expression(_Operand):
-	cdef public object _operator
-	cdef public object _left_operand
-	cdef public object _right_operand
-	def __init__(self, t, left_operand, right_operand):
-		self._operator = t
-		self._left_operand = left_operand
-		self._right_operand = right_operand
-	def __str__(self):
-		#if isinstance(self._right_operand, _Operand):
-		#print (self._left_operand.__class__.__name__, self._right_operand.__class__.__name__)
-		return "%s%s%s" % (self._left_operand, opstring_mapping[self._operator], self._right_operand)
+cdef class Database:
+	# readonly doesn't apply for cython-access
+	cdef readonly unicode _name
+	cdef readonly list _models # see models()
+	cdef readonly _user_model # required for versioning, permissions
+	def __cinit__(self):
+		self._name = "UNASSIGNED"
+		self._models = []
+		self._user_model = None
+	def __init__(self):
+		#self._cache = cacheobj or NullCache()
+		# TODO: warn at the beginning, that authorization is disabled and a usermodel should be picked to fix that
+		# _user_model should point to something that implements UserModel, required for versioning, permissions
+		pass
+	def bind_models(self, *model_args):
+		# use this method to redefine _models after creation of Database object
+		# force _models to concist of valid Model objects
+		# return _models if no parameters are given
+		for m in model_args:
+			assert(hasattr(m, "_columns"))
+			m.bind_parent(self) # will call self._models.append(m)
+		return self
+	def user_model(self, model = None):
+		if model is not None:
+			assert(hasattr(model, "_columns"))
+			self._user_model = model
+			return self
+		return self._user_model
+		
 
 # note on _Command: think of it as prepared statement
 # only the way things are stored should be optimized
@@ -172,14 +200,13 @@ cdef class _Command:
 			return self.command_changed()
 		self.where_expr.__and__(expr)
 		return self.command_changed()
-	def columns(self, *columns):
+	def columns(self, *column_args):
 		# use this method to redefine relevant_columns after creation of Command object
 		# force relevant_columns to concist of Column/Table/Aggregation objects
 		# return relevant_columns if no parameters are given
-		print(columns)
-		if columns:
+		if column_args:
 			self.relevant_columns = [] # emptied before appending
-			for col in columns:
+			for col in column_args:
 				print ("AIHS")
 				if hasattr(col, "_instantiation_count"): # is _Column
 					self.relevant_columns.append(col)
@@ -187,8 +214,7 @@ cdef class _Command:
 					self.relevant_columns += col._columns
 				else: # TODO: Aggregations
 					raise TypeError("As of yet, only Column- and Model objects are allowed in append_columns()")
-			# TODO: fill involved_tables list
-			return self.command_changed()
+			return self.command_changed() # TODO: fill involved_tables list
 		return self.relevant_columns
 	def command_changed(self):
 		# must be called by every method that has an influence on the prepared statement,
@@ -263,7 +289,7 @@ cdef class _Column(_Operand):
 		return instance[self._instantiation_count]
 	def __set__(self, instance, value):
 		instance[self._instantiation_count] = value
-	def bind_late(self, object parent, unicode name, int list_position):
+	def bind_parent(self, object parent, unicode name, int list_position):
 		"""assign a Model object to the column and a name for itself, this usually happens automatically"""
 		self._model = parent
 		self._name = name

@@ -3,7 +3,6 @@
 import pstats, cProfile
 from database import *
 from models import Model
-'''
 
 import sqlalchemy.sql
 from sqlalchemy import MetaData, create_engine
@@ -12,18 +11,12 @@ engine = create_engine('postgresql://test:123456@localhost/test1', pool_size=5, 
 
 # simple test
 connection = engine.connect()
-result = connection.execute("select * from autor")
+result = connection.execute("select * from film")
 # databse introspection
-
-#print(meta.tables.keys())
-
-Autor = meta.tables["autor"]
 #print(repr(Autor))
-s = sqlalchemy.sql.Select([Autor.c.nachname]).where(Autor.c.nachname.like("%us"))
-print(getattr(Autor.c.nachname, "like")("%us"))
+#s = sqlalchemy.sql.Select([Autor.c.nachname]).where(Autor.c.nachname.like("%us"))
+#print(getattr(Autor.c.nachname, "like")("%us"))
 #s = s.select_from(meta.tables["buch"])
-result = connection.execute(s)
-print(str(s), result.fetchone())
 connection.close()
 
 """create objects using sqlalchemy's reflection; attribute is what is returned by create_engine()"""
@@ -42,8 +35,12 @@ def introspect_sqlalchemy(engine):
 			coltype_name = column_sqla.type.__class__.__name__.lower()
 			if "int" in coltype_name:
 				columnclass = IntegerColumn
-			elif "char" in coltype_name or "string" in coltype_name or "unicode" in coltype_name:
+			elif "char" in coltype_name or coltype_name == "text":
 				columnclass = TextColumn
+			elif coltype_name == "boolean":
+				columnclass = BooleanColumn
+			elif coltype_name == "date":
+				columnclass = DateColumn
 			else: # TODO / raise NotImplementedError
 				# decimal is exactly as precise as declared, while numeric is at least as precise as declared
 				print "=========== not handled in introspect_sqlalchemy(): ", coltype_name
@@ -67,8 +64,6 @@ def introspect_sqlalchemy(engine):
 		newmodel._sqla = table
 	return newmodels_dict
 models = introspect_sqlalchemy(engine)
-#print repr(models["buch"])
-#print repr(models["buch"]())
 
 def operator_to_sqlalchemy(expr):
 	# use sqlalchemy equivalences
@@ -99,25 +94,12 @@ def command_to_string_sqlalchemy(cmd):
 		having=None
 	)
 	return stmt
-stmt = select(models["buch"]).where("saf" == models["buch"].titel)
+#stmt = select(models["film"]).where("saf" == models["film"].name)
 #connection = engine.connect()
 #stmt = command_to_string_sqlalchemy(stmt)
 #result = connection.execute(stmt)
 #print(str(stmt), result.fetchone())
 
-
-i = TextColumn()
-#print i | (i < i) == i
-#print i.__and__(i < i) == i
-
-x = select()
-y = update(x)
-y.values("saf", "sf")
-z = delete(y)
-model = TextColumn()
-stmt = select().from_(model).where((model == 2) & (model ==3))
-expr = (model == 2) & (model ==3)
-'''
 class ModelTest(Model):
 	z = TextColumn()
 	x = TextColumn()
@@ -128,4 +110,3 @@ print(y._columns)
 print(repr(ModelTest.x))
 print(list(y))
 
-#test_test({124:"asf", "ohf":"asf"})
