@@ -117,14 +117,15 @@ z = delete(y)
 model = TextColumn()
 stmt = select().from_(model).where((model == 2) & (model ==3))
 expr = (model == 2) & (model ==3)
-
+'''
 class ModelTest(Model):
 	z = TextColumn()
 	x = TextColumn()
 
 y = ModelTest(x=12)
 
-#print(y._columns)
-#print(repr(ModelTest.x))
-'''
-test_test({124:"asf", "ohf":"asf"})
+print(y._columns)
+print(repr(ModelTest.x))
+print(list(y))
+
+#test_test({124:"asf", "ohf":"asf"})

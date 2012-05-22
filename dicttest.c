@@ -4,7 +4,6 @@ Iterate through dict
 http://www.gilgalab.com.br/2011/05/03/python-c-api-first-step
 http://docs.python.org/c-api/intro.html#reference-counts
 */
-
 int test(const PyObject *dict) {
 	PyObject *key, *value;
 	Py_ssize_t pos = 0;

@@ -7,6 +7,7 @@ __license__ = "AGPL v3"
 # http://docs.sqlalchemy.org/en/latest/core/schema.html#reflecting-all-tables-at-once
 # follow this: http://www.google-melange.com/gsoc/project/google/gsoc2012/redbrain1123/28002
 from cpython cimport bool
+from cpython cimport PyList_New, PyList_SET_ITEM
 #cdef extern from "object.h":
 #	ctypedef class __builtin__.type [object PyHeapTypeObject]:
 #		pass
@@ -22,10 +23,10 @@ cpdef bytes escape(s):
 	return r
 
 # testing extensions
-cdef extern from "dicttest.h":
-	int test(dict)
-cpdef test_test(dict x):
-	test(x)
+#cdef extern from "dicttest.h":
+#	int test(dict)
+#cpdef test_test(dict x):
+#	test(x)
 
 opstring_mapping = { "__and__" : " and ", "__or__" : " or ",  "__lt__" : " < ", "__le__" : " <= ", "__ge__" : " >= ", "__ge__" : " > ", "__eq__" : " = ", "__ne__" : " != " }
 
@@ -65,12 +66,20 @@ cdef class _Model(list):
 		when creating Model objects are created manually, this syntax might be preferred: Model(col="afs")
 		you can't mix those, e.g. Model("asf", "saf", x="saf") won't work"""
 		if args: # fast, but there are some rules -> set __debug__ = False when benchmarking
-			assert(len(kwargs) == 0)
+			assert(not kwargs)
 			assert(len(args) == len(self._columns))
 			list.__init__(self, args)
 			return
 		# if not all attributes are set, assign default values
-		list.__init__(self, [kwargs.pop(c._name, c.default()) for c in self._columns])
+		# http://trac.sagemath.org/sage_trac/attachment/ticket/12029/trac12029_clonable_int_array_2_list.patch
+		cdef int i = 0
+		cdef list L = <list> PyList_New(len(self._columns)) # avoid reallocation this way
+		for c in self._columns:
+			# L[i] = ... led to segfaults as it translated to bs like Py_DECREF(PyList_GET_ITEM(o, i));
+			# PyList_SET_ITEM is used to fill in new lists where there is no previous content (see docs)
+			PyList_SET_ITEM(L, i, kwargs.pop(c._name, c.default()))
+			i = i+1
+		list.__init__(self, L)
 	# operators for Model Objects (Aggregations, Joins?)
 	def sum(self):
 		return Expression("__sum__", self, None)
