@@ -68,9 +68,9 @@ class _Operand:
 
 @cython.cclass
 class Expression(_Operand):
-	_operator = cython.declare(cython.object)
-	_left_operand = cython.declare(cython.object)
-	_right_operand = cython.declare(cython.object)
+	_operator = cython.declare(object)
+	_left_operand = cython.declare(object)
+	_right_operand = cython.declare(object)
 	def __init__(self, t, left_operand, right_operand):
 		self._operator = t
 		self._left_operand = left_operand
@@ -83,9 +83,9 @@ class Expression(_Operand):
 @cython.cclass
 class Database:
 	# readonly doesn't apply for cython-access
-	_name = cython.declare(unicode, "UNASSIGNED") #typedef...
-	_models = cython.declare(list, []) # see models()
-	#_user_model = cython.declare(Model, None) # required for versioning, permissions
+	_name = cython.declare(unicode) #typedef...
+	_models = cython.declare(list) # see models()
+	#_user_model = cython.declare(Model) # required for versioning, permissions
 	def __init__(self):
 		#self._cache = cacheobj or NullCache()
 		# TODO: warn at the beginning, that authorization is disabled and a usermodel should be picked to fix that
@@ -118,24 +118,24 @@ class Database:
 @cython.cclass
 class _Command:
 	## attributes that don't need to be copied:
-	# prepared_statement: need to be regenerated if anything changed (see command_changed)
-	prepared_statement = cython.declare(unicode, "") #typedef...
+	# _prepared_statement: need to be regenerated if anything changed (see command_changed)
+	_prepared_statement = cython.declare(unicode) #typedef...
 	# general attributes for common queries:
 	#  all subclasses need to be able to be converted into each other
 	#  back and forth, so any information must be avaiable, even if
 	#  irrelevant for current operation
 	## attributes that need to be copied
-	relevant_columns = cython.declare(list, []) # idea: only store names, have a method to forward to getattr(parent, colname)
-	groupby_columns = cython.declare(list, [])
-	orderby_columns = cython.declare(list, [])
-	involved_tables = cython.declare(list, [])
-	values_commit = cython.declare(list, [])
-	values_where = cython.declare(list, [])
-	values_having = cython.declare(list, [])
-	where_expr = cython.declare(Expression, None)
-	having_expr = cython.declare(Expression, None)
-	offset_num = cython.declare(cython.int, -1)
-	limit_num = cython.declare(cython.int, -1)
+	relevant_columns = cython.declare(list) # idea: only store names, have a method to forward to getattr(parent, colname)
+	groupby_columns = cython.declare(list)
+	orderby_columns = cython.declare(list)
+	involved_tables = cython.declare(list)
+	values_commit = cython.declare(list)
+	values_where = cython.declare(list)
+	values_having = cython.declare(list)
+	where_expr = cython.declare(Expression)
+	having_expr = cython.declare(Expression)
+	offset_num = cython.declare(cython.int)
+	limit_num = cython.declare(cython.int)
 	#def __cinit__(self):
 	# http://docs.cython.org/src/reference/extension_types.html#initialization-cinit-and-init
 	# All C-level attributes have been initialized to 0 or null
@@ -190,7 +190,7 @@ class _Command:
 	def command_changed(self):
 		# must be called by every method that has an influence on the prepared statement,
 		# or otherwise calling that method may have no effect at all!
-		self.prepared_statement = ""
+		self._prepared_statement = ""
 		return self
 	# Subclasses shall implement: values(), __str__()
 
@@ -244,15 +244,25 @@ class select(_Command):
 @cython.cclass
 class _Column(_Operand):
 	# readonly doesn't apply for cython-access
-	_name = cython.declare(unicode, "UNASSIGNED")
-	prepared_statement = cython.declare(unicode, "") # assigned via late-binding
-	#_model = cython.declare(Model, None) # assigned via late-binding
-	_instantiation_count = cython.declare(cython.int, 0) # assigned via late-binding
-	_sqla = cython.declare(cython.object, None) # may hold backend equivalent
-	_default = cython.declare(cython.object, False) # default value to fallback to
-	_nullable = cython.declare(cython.bint, True) # set via not_null()
-	_unique = cython.declare(cython.bint, False) # set via unique()
-	_representative = cython.declare(_Column, None) # set via representative()
+	_name = cython.declare(unicode)
+	_prepared_statement = cython.declare(unicode) # assigned via late-binding
+	#_model = cython.declare(_Model) # assigned via late-binding
+	_instantiation_count = cython.declare(cython.int) # assigned via late-binding
+	_sqla = cython.declare(object) # may hold backend equivalent
+	_default = cython.declare(object) # default value to fallback to
+	_nullable = cython.declare(cython.bint) # set via not_null()
+	_unique = cython.declare(cython.bint) # set via unique()
+	_representative = cython.declare(cython.bint) # set via representative()
+	def __init__(self): # need to initialize EVERY attribute if in pure-python mode
+		self._name = "UNASSIGNED"
+		self._prepared_statement = ""
+		self._instantiation_count = -1
+		self._model = None
+		self._sqla = None
+		self._default = None
+		self._nullable = True
+		self._unique = False
+		self._representative = False
 	def __get__(self, instance, owner):
 		# see http://docs.python.org/reference/datamodel.html
 		if instance is None:
@@ -318,11 +328,23 @@ class DatetimeColumn(_Column):
 	pass
 @cython.cclass
 class PrimaryKey(_Column):
-	pass
+	def __init__(self, column = IntegerColumn, autoinc = True):
+		""" column: (class or object) will be converted into PrimaryKey object
+			autoinc: whether to AutoIncrement, will only an effect on IntegerColumn Objects"""
+		#BaseColumn.__init__(self)
+		#if isclass(column):
+		#	column = column()
+		#self.__dict__ = column.__dict__ # FIXME!!!
+		#self._is_pk = True
+		#self._autoincrement = autoinc # has only an effect on IntegerColumn
+		# policy: in case of update: hiddenfield, in case of insert: NOT RENDERED (TODO: Nullrender_as)
+		# thought for inserts: shall not every HiddenField be ignored in iserts? note there is readonly(for updates), too!
+		#self._renderclass = HiddenField
+		#self._choices = []
 @cython.cclass
 class ForeignKey(_Column):
-	_reference = cython.declare(_Column, None) 
-	_reference_on_delete = cython.declare(unicode, "cascade") 
+	#_reference = cython.declare(_Column) 
+	_reference_on_delete = cython.declare(unicode) 
 	def __init__(self, reference, on_delete = "cascade"):
 		_Column.__init__(self)
 		# reference: either the referenced Model or it's primary-key-object (will be the latter afterwards)
@@ -334,3 +356,28 @@ class ForeignKey(_Column):
 	def __repr__(self):
 		rstr = _Column.__repr__(self)
 		return rstr.replace(">", " references %s>" % str(self._reference))
+
+#@cython.cclass
+class _Model(list): # (can't apply Metaclass within Cython classes, yet)
+	def __init__(self, *args, **kwargs):
+		"""tuple/lists can be converted into namedlist objects just like this:
+		>>> seqobj = [1,2,3]
+		>>> namedlist(*seqobj)
+		when creating namedlist objects manually, this syntax might be preferred:
+		>>> namedlist(attr1="afs")
+		you can't mix those, e.g. namedlist("asf", "saf", x="saf") won't work"""
+		if args: # fast, but there are some rules -> set __debug__ = False when benchmarking
+			assert(not kwargs)
+			assert(len(args) == len(self._columns))
+			list.__init__(self, args)
+			return
+		# if not all attributes are set, assign default values
+		L = cython.declare(list)
+		L = [kwargs.pop(c._name, c.default()) for c in self._columns]
+		'''cdef int i = 0
+		cdef list L = <list> PyList_New(len(self._columns)) # avoid reallocation this way
+		for c in self._columns:
+			# PyList_SET_ITEM is used to fill in new lists where there is no previous content
+			PyList_SET_ITEM(L, i, kwargs.pop(c._name, c.default()))
+			i = i+1'''
+		list.__init__(self, L)
