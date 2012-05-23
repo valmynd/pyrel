@@ -6,12 +6,15 @@ __license__ = "AGPL v3"
 # read this: http://effbot.org/zone/simple-top-down-parsing.htm
 # http://docs.sqlalchemy.org/en/latest/core/schema.html#reflecting-all-tables-at-once
 # follow this: http://www.google-melange.com/gsoc/project/google/gsoc2012/redbrain1123/28002
-from cpython cimport bool
-from cpython cimport PyList_New, PyList_SET_ITEM
+# maybe easier accomplished by doing this: http://docs.cython.org/src/tutorial/pure.html
+# returns decorator in cython 0.17: https://sage.math.washington.edu:8091/hudson/job/cython-docs/doclinks/1/src/tutorial/pure.html
+#from cpython cimport bool
 #cdef extern from "object.h":
 #	ctypedef class __builtin__.type [object PyHeapTypeObject]:
 #		pass
+import cython
 
+'''
 cdef extern from "cescape.h":
 	char* escape_html(char*)
 cpdef bytes escape(s):
@@ -27,11 +30,13 @@ cpdef bytes escape(s):
 #	int test(dict)
 #cpdef test_test(dict x):
 #	test(x)
+'''
 
 opstring_mapping = { "__and__" : " and ", "__or__" : " or ",  "__lt__" : " < ", "__le__" : " <= ", "__ge__" : " >= ", "__ge__" : " > ", "__eq__" : " = ", "__ne__" : " != " }
 
 # _Operand shall contain all operators relevant for Column objects
-cdef class _Operand:
+@cython.cclass
+class _Operand:
 	def __or__(self, other): # a | b
 		# because the | operator has the highest operator precedence, the
 		# operators need to be put into brackets, like this: i | (i < i)
@@ -42,8 +47,11 @@ cdef class _Operand:
 		# operators need to be put into brackets, like this: i & (i < i)
 		# thus you can also use i.__and__(i < i)
 		return Expression("__and__", self, other)
-	def __richcmp__(self, other, int operator):
+	'''def __richcmp__(self, other, operator):
 		# http://docs.cython.org/src/userguide/special_methods.html#rich-comparisons
+		# SEVERE missing feature in cython: http://trac.cython.org/cython_trac/ticket/130
+		# cython.declare(cython.int) # http://groups.google.com/group/cython-users/browse_thread/thread/dab58913ae0deefd
+		operator = 
 		if operator == 0: # < 0 lt # a < b
 			op = "__lt__"
 		elif operator == 1: # <= 1 le # a <= b
@@ -56,12 +64,13 @@ cdef class _Operand:
 			op = "__gt__"
 		elif operator == 5: # >= 5 ge # a >= b
 			op = "__ge__"
-		return Expression(op, self, other)
+		return Expression(op, self, other)'''
 
-cdef class Expression(_Operand):
-	cdef public object _operator
-	cdef public object _left_operand
-	cdef public object _right_operand
+@cython.cclass
+class Expression(_Operand):
+	_operator = cython.declare(cython.object)
+	_left_operand = cython.declare(cython.object)
+	_right_operand = cython.declare(cython.object)
 	def __init__(self, t, left_operand, right_operand):
 		self._operator = t
 		self._left_operand = left_operand
@@ -71,45 +80,12 @@ cdef class Expression(_Operand):
 		#print (self._left_operand.__class__.__name__, self._right_operand.__class__.__name__)
 		return "%s%s%s" % (self._left_operand, opstring_mapping[self._operator], self._right_operand)
 
-# _Model is a Baseclass for Model (can't apply Metaclass within Cython classes, yet)
-cdef class _Model(list):
-	def __init__(self, *args, **kwargs):
-		"""this constructor is meant to be called in order to create per-row objects
-		tuples can be converted into Model objects just like this: Model(*result.fetchone())
-		when creating Model objects manually, this syntax might be preferred: Model(col="afs")
-		you can't mix those, e.g. Model("asf", "saf", x="saf") won't work"""
-		if args: # fast, but there are some rules -> set __debug__ = False when benchmarking
-			assert(not kwargs)
-			assert(len(args) == len(self._columns))
-			list.__init__(self, args)
-			return
-		# if not all attributes are set, assign default values
-		cdef int i = 0
-		cdef list L = <list> PyList_New(len(self._columns)) # avoid reallocation this way
-		for c in self._columns:
-			# PyList_SET_ITEM is used to fill in new lists where there is no previous content
-			PyList_SET_ITEM(L, i, kwargs.pop(c._name, c.default()))
-			i = i+1
-		list.__init__(self, L)
-	# operators for Model Objects (Aggregations, Joins?)
-	def sum(self):
-		return Expression("__sum__", self, None)
-	def min(self):
-		return Expression("__min__", self, None)
-	def avg(self):
-		return Expression("__avg_", self, None)
-	#def count(self, distinct = False):
-	#	return Expression("__count__", self, None)
-
-cdef class Database:
+@cython.cclass
+class Database:
 	# readonly doesn't apply for cython-access
-	cdef readonly unicode _name
-	cdef readonly list _models # see models()
-	cdef readonly _user_model # required for versioning, permissions
-	def __cinit__(self):
-		self._name = "UNASSIGNED"
-		self._models = []
-		self._user_model = None
+	_name = cython.declare(unicode, "UNASSIGNED") #typedef...
+	_models = cython.declare(list, []) # see models()
+	#_user_model = cython.declare(Model, None) # required for versioning, permissions
 	def __init__(self):
 		#self._cache = cacheobj or NullCache()
 		# TODO: warn at the beginning, that authorization is disabled and a usermodel should be picked to fix that
@@ -129,46 +105,41 @@ cdef class Database:
 			self._user_model = model
 			return self
 		return self._user_model
-		
+	def __getattr__(self, name):
+		# if the attribute is found through the "normal" mechanism, __getattr__() is not called!
+		if name[0] == "_":
+			print(name)
+		return name
+	def __setattr__(self, name, val):
+		pass
 
 # note on _Command: think of it as prepared statement
 # only the way things are stored should be optimized
-cdef class _Command:
+@cython.cclass
+class _Command:
 	## attributes that don't need to be copied:
 	# prepared_statement: need to be regenerated if anything changed (see command_changed)
-	cdef public unicode prepared_statement
+	prepared_statement = cython.declare(unicode, "") #typedef...
 	# general attributes for common queries:
 	#  all subclasses need to be able to be converted into each other
 	#  back and forth, so any information must be avaiable, even if
 	#  irrelevant for current operation
 	## attributes that need to be copied
-	cdef readonly list relevant_columns # idea: only store names, have a method to forward to getattr(parent, colname)
-	cdef readonly list groupby_columns
-	cdef readonly list orderby_columns
-	cdef readonly list involved_tables
-	cdef public list values_commit
-	cdef public list values_where
-	cdef public list values_having
-	cdef readonly Expression where_expr
-	cdef readonly Expression having_expr
-	cdef readonly int offset_num
-	cdef readonly int limit_num
-	def __cinit__(self):
-		# http://docs.cython.org/src/reference/extension_types.html#initialization-cinit-and-init
-		# All C-level attributes have been initialized to 0 or null
-		# Python have been initialized to None, but you can not rely on that
-		self.prepared_statement = "" # empty means, it needs to be (re)generated
-		self.relevant_columns = []
-		self.groupby_columns = []
-		self.orderby_columns = []
-		self.involved_tables = []
-		self.values_commit = []
-		self.values_where = []
-		self.values_having = []
-		self.where_expr = None
-		self.having_expr = None
-		self.offset_num = -1
-		self.limit_num = -1
+	relevant_columns = cython.declare(list, []) # idea: only store names, have a method to forward to getattr(parent, colname)
+	groupby_columns = cython.declare(list, [])
+	orderby_columns = cython.declare(list, [])
+	involved_tables = cython.declare(list, [])
+	values_commit = cython.declare(list, [])
+	values_where = cython.declare(list, [])
+	values_having = cython.declare(list, [])
+	where_expr = cython.declare(Expression, None)
+	having_expr = cython.declare(Expression, None)
+	offset_num = cython.declare(cython.int, -1)
+	limit_num = cython.declare(cython.int, -1)
+	#def __cinit__(self):
+	# http://docs.cython.org/src/reference/extension_types.html#initialization-cinit-and-init
+	# All C-level attributes have been initialized to 0 or null
+	# Python have been initialized to None, but you can not rely on that
 	def __init__(self, *relevant_columns):
 		# this is a conversion constructor, e.g. Select(Update()) should work
 		if len(relevant_columns) == 1:
@@ -223,28 +194,32 @@ cdef class _Command:
 		return self
 	# Subclasses shall implement: values(), __str__()
 
-cdef class delete(_Command):
+@cython.cclass
+class delete(_Command):
 	#def __init__(self, _Command other): # DOES NOT WORK, MAYBE FIXED IN LATER CYTHON
 	#	_Command.__init__(other)
 	def values(self):
 		# make variants to return other values, depending on command type
 		return self.values_where
 
-cdef class update(_Command):
+@cython.cclass
+class update(_Command):
 	def values(self, *values_commited):
 		if values_commited:
 			self.values_commit = list(values_commited) # replaces them!
 			return self
 		return self.values_commit + self.values_where # ensure the right order
 
-cdef class insert(_Command):
+@cython.cclass
+class insert(_Command):
 	def values(self, *values_commited):
 		if values_commited:
 			self.values_commit = list(values_commited) # replaces them!
 			return self
 		return self.values_commit # there is no where clause for insert()
 
-cdef class select(_Command):
+@cython.cclass
+class select(_Command):
 	def from_(self, *models):
 		return self.columns(*models)
 	def values(self):
@@ -266,22 +241,18 @@ cdef class select(_Command):
 		return self.command_changed()
 
 """ property-like Interface for Column objects, not visible from python """
-cdef class _Column(_Operand):
+@cython.cclass
+class _Column(_Operand):
 	# readonly doesn't apply for cython-access
-	cdef readonly unicode _name # assigned via late-binding
-	cdef readonly object _model # assigned via late-binding
-	cdef readonly int _instantiation_count # assigned via late-binding
-	cdef public object _sqla # may hold backend equivalent
-	cdef public object _default # default value to fallback to
-	cdef public bool _nullable # set via not_null()
-	cdef public bool _unique # set via unique()
-	cdef public _Column _representative # set via representative()
-	def __cinit__(self):
-		self._instantiation_count = -1
-		self._name = "UNASSIGNED"
-		self._model = None
-		self._default = None
-		self._nullable = True
+	_name = cython.declare(unicode, "UNASSIGNED")
+	prepared_statement = cython.declare(unicode, "") # assigned via late-binding
+	#_model = cython.declare(Model, None) # assigned via late-binding
+	_instantiation_count = cython.declare(cython.int, 0) # assigned via late-binding
+	_sqla = cython.declare(cython.object, None) # may hold backend equivalent
+	_default = cython.declare(cython.object, False) # default value to fallback to
+	_nullable = cython.declare(cython.bint, True) # set via not_null()
+	_unique = cython.declare(cython.bint, False) # set via unique()
+	_representative = cython.declare(_Column, None) # set via representative()
 	def __get__(self, instance, owner):
 		# see http://docs.python.org/reference/datamodel.html
 		if instance is None:
@@ -289,7 +260,8 @@ cdef class _Column(_Operand):
 		return instance[self._instantiation_count]
 	def __set__(self, instance, value):
 		instance[self._instantiation_count] = value
-	def bind_parent(self, object parent, unicode name, int list_position):
+	#@cython.locals(parent=Model, name=unicode, list_position=cython.int)
+	def bind_parent(self, parent, name, list_position):
 		"""assign a Model object to the column and a name for itself, this usually happens automatically"""
 		self._model = parent
 		self._name = name
@@ -320,27 +292,37 @@ cdef class _Column(_Operand):
 	def __repr__(self):
 		return "<%s %s.%s>" % (self.__class__.__name__, self._model._name, self._name)
 
-cdef class TextColumn(_Column):
+@cython.cclass
+class TextColumn(_Column):
 	pass
-cdef class BooleanColumn(_Column):
+@cython.cclass
+class BooleanColumn(_Column):
 	pass
-cdef class IntegerColumn(_Column):
+@cython.cclass
+class IntegerColumn(_Column):
 	pass
-cdef class FloatColumn(_Column):
+@cython.cclass
+class FloatColumn(_Column):
 	pass
-cdef class DecimalColumn(_Column):
+@cython.cclass
+class DecimalColumn(_Column):
 	pass
-cdef class DateColumn(_Column):
+@cython.cclass
+class DateColumn(_Column):
 	pass
-cdef class TimeColumn(_Column):
+@cython.cclass
+class TimeColumn(_Column):
 	pass
-cdef class DatetimeColumn(_Column):
+@cython.cclass
+class DatetimeColumn(_Column):
 	pass
-cdef class PrimaryKey(_Column):
+@cython.cclass
+class PrimaryKey(_Column):
 	pass
-cdef class ForeignKey(_Column):
-	cdef readonly _Column _reference
-	cdef readonly unicode _reference_on_delete
+@cython.cclass
+class ForeignKey(_Column):
+	_reference = cython.declare(_Column, None) 
+	_reference_on_delete = cython.declare(unicode, "cascade") 
 	def __init__(self, reference, on_delete = "cascade"):
 		_Column.__init__(self)
 		# reference: either the referenced Model or it's primary-key-object (will be the latter afterwards)

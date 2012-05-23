@@ -110,3 +110,5 @@ print(y._columns)
 print(repr(ModelTest.x))
 print(list(y))
 
+d = Database()
+d._x

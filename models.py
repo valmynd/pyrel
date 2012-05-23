@@ -30,7 +30,7 @@ class ModelMeta(type):
 		cls._database = parent
 		# add itself to _tables and _table_names
 		parent._models.append(cls)
-		# make it accessible as attribute # FIXME: won't work, as Database is a cdef class
+		# make it accessible as an attribute => won't work, as Database is a cdef class
 		#setattr(parent, cls._name, cls)
 		# TODO: prepare sql_each and sql_populate
 		#if len(cls._translated) > 0:# TODO: same behaviour in introspect
@@ -61,3 +61,14 @@ class Model(_Model): # (list, metaclass=ModelMeta):
 		#if len(res) == 1:
 		#	return cls(res.pop())
 		return None
+
+
+	'''# operators for Model Objects (Aggregations, Joins?)
+	def sum(self):
+		return Expression("__sum__", self, None)
+	def min(self):
+		return Expression("__min__", self, None)
+	def avg(self):
+		return Expression("__avg_", self, None)
+	#def count(self, distinct = False):
+	#	return Expression("__count__", self, None)'''
