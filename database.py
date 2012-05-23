@@ -3,11 +3,10 @@
 # cython: language_level=3
 __author__ = "C.Wilhelm"
 __license__ = "AGPL v3"
-# read this: http://effbot.org/zone/simple-top-down-parsing.htm
-# http://docs.sqlalchemy.org/en/latest/core/schema.html#reflecting-all-tables-at-once
 # follow this: http://www.google-melange.com/gsoc/project/google/gsoc2012/redbrain1123/28002
 # maybe easier accomplished by doing this: http://docs.cython.org/src/tutorial/pure.html
 # returns decorator in cython 0.17: https://sage.math.washington.edu:8091/hudson/job/cython-docs/doclinks/1/src/tutorial/pure.html
+# need to be very diligent for optimization to work out: http://stackoverflow.com/questions/10394660/very-slow-cython-classes
 #from cpython cimport bool
 #cdef extern from "object.h":
 #	ctypedef class __builtin__.type [object PyHeapTypeObject]:
@@ -51,7 +50,7 @@ class _Operand:
 		# http://docs.cython.org/src/userguide/special_methods.html#rich-comparisons
 		# SEVERE missing feature in cython: http://trac.cython.org/cython_trac/ticket/130
 		# cython.declare(cython.int) # http://groups.google.com/group/cython-users/browse_thread/thread/dab58913ae0deefd
-		operator = 
+		operator =
 		if operator == 0: # < 0 lt # a < b
 			op = "__lt__"
 		elif operator == 1: # <= 1 le # a <= b
@@ -85,7 +84,7 @@ class Database:
 	# readonly doesn't apply for cython-access
 	_name = cython.declare(unicode) #typedef...
 	_models = cython.declare(list) # see models()
-	#_user_model = cython.declare(Model) # required for versioning, permissions
+	_user_model = cython.declare(object) # required for versioning, permissions
 	def __init__(self):
 		#self._cache = cacheobj or NullCache()
 		# TODO: warn at the beginning, that authorization is disabled and a usermodel should be picked to fix that
@@ -136,10 +135,22 @@ class _Command:
 	having_expr = cython.declare(Expression)
 	offset_num = cython.declare(cython.int)
 	limit_num = cython.declare(cython.int)
-	#def __cinit__(self):
-	# http://docs.cython.org/src/reference/extension_types.html#initialization-cinit-and-init
-	# All C-level attributes have been initialized to 0 or null
-	# Python have been initialized to None, but you can not rely on that
+	def __cinit__(self):
+		# http://docs.cython.org/src/reference/extension_types.html#initialization-cinit-and-init
+		# All C-level attributes have been initialized to 0 or null
+		# Python have been initialized to None, but you can not rely on that
+		self.prepared_statement = "" # empty means, it needs to be (re)generated
+		self.relevant_columns = []
+		self.groupby_columns = []
+		self.orderby_columns = []
+		self.involved_tables = []
+		self.values_commit = []
+		self.values_where = []
+		self.values_having = []
+		self.where_expr = None
+		self.having_expr = None
+		self.offset_num = -1
+		self.limit_num = -1
 	def __init__(self, *relevant_columns):
 		# this is a conversion constructor, e.g. Select(Update()) should work
 		if len(relevant_columns) == 1:
@@ -159,7 +170,9 @@ class _Command:
 				self.offset_num = other.offset_num
 				self.limit_num = other.limit_num
 				return
-		elif relevant_columns: # may intentionally be left empty
+		elif not cython.compiled:
+			self.__cinit__()
+		if relevant_columns: # may intentionally be left empty
 			self.columns(*relevant_columns) # e.g. stmt = select().from_(model)
 	def __str__(self):
 		# __str__ methods prepare SQL command strings for query_*()
@@ -245,17 +258,15 @@ class select(_Command):
 class _Column(_Operand):
 	# readonly doesn't apply for cython-access
 	_name = cython.declare(unicode)
-	_prepared_statement = cython.declare(unicode) # assigned via late-binding
-	#_model = cython.declare(_Model) # assigned via late-binding
+	_model = cython.declare(object) # assigned via late-binding
 	_instantiation_count = cython.declare(cython.int) # assigned via late-binding
 	_sqla = cython.declare(object) # may hold backend equivalent
 	_default = cython.declare(object) # default value to fallback to
 	_nullable = cython.declare(cython.bint) # set via not_null()
 	_unique = cython.declare(cython.bint) # set via unique()
 	_representative = cython.declare(cython.bint) # set via representative()
-	def __init__(self): # need to initialize EVERY attribute if in pure-python mode
+	def __cinit__(self): # need to initialize EVERY attribute if in pure-python mode
 		self._name = "UNASSIGNED"
-		self._prepared_statement = ""
 		self._instantiation_count = -1
 		self._model = None
 		self._sqla = None
@@ -263,6 +274,9 @@ class _Column(_Operand):
 		self._nullable = True
 		self._unique = False
 		self._representative = False
+	def __init__(self):
+		if not cython.compiled:
+			self.__cinit__()
 	def __get__(self, instance, owner):
 		# see http://docs.python.org/reference/datamodel.html
 		if instance is None:
@@ -299,34 +313,33 @@ class _Column(_Operand):
 		return self
 	def __str__(self):
 		return self._name
-	def __repr__(self):
-		return "<%s %s.%s>" % (self.__class__.__name__, self._model._name, self._name)
-
-@cython.cclass
+	#def __repr__(self):
+	#	return "<%s %s.%s>" % (self.__class__.__name__, self._model._name, self._name)
+#@cython.cclass # FIXME: DOESN'T WORK
 class TextColumn(_Column):
 	pass
-@cython.cclass
+#@cython.cclass
 class BooleanColumn(_Column):
 	pass
-@cython.cclass
+#@cython.cclass
 class IntegerColumn(_Column):
 	pass
-@cython.cclass
+#@cython.cclass
 class FloatColumn(_Column):
 	pass
-@cython.cclass
+#@cython.cclass
 class DecimalColumn(_Column):
 	pass
-@cython.cclass
+#@cython.cclass
 class DateColumn(_Column):
 	pass
-@cython.cclass
+#@cython.cclass
 class TimeColumn(_Column):
 	pass
-@cython.cclass
+#@cython.cclass
 class DatetimeColumn(_Column):
 	pass
-@cython.cclass
+#@cython.cclass
 class PrimaryKey(_Column):
 	def __init__(self, column = IntegerColumn, autoinc = True):
 		""" column: (class or object) will be converted into PrimaryKey object
@@ -341,10 +354,10 @@ class PrimaryKey(_Column):
 		# thought for inserts: shall not every HiddenField be ignored in iserts? note there is readonly(for updates), too!
 		#self._renderclass = HiddenField
 		#self._choices = []
-@cython.cclass
+#@cython.cclass
 class ForeignKey(_Column):
-	#_reference = cython.declare(_Column) 
-	_reference_on_delete = cython.declare(unicode) 
+	_reference = cython.declare(object)
+	_reference_on_delete = cython.declare(unicode)
 	def __init__(self, reference, on_delete = "cascade"):
 		_Column.__init__(self)
 		# reference: either the referenced Model or it's primary-key-object (will be the latter afterwards)
@@ -357,7 +370,7 @@ class ForeignKey(_Column):
 		rstr = _Column.__repr__(self)
 		return rstr.replace(">", " references %s>" % str(self._reference))
 
-#@cython.cclass
+@cython.cclass
 class _Model(list): # (can't apply Metaclass within Cython classes, yet)
 	def __init__(self, *args, **kwargs):
 		"""tuple/lists can be converted into namedlist objects just like this:

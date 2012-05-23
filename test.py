@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+# to test pure-python mode: >>> rm database.so database.pyc database.c
 import pstats, cProfile
 from database import *
 from models import Model
@@ -7,7 +7,6 @@ from models import Model
 import sqlalchemy.sql
 from sqlalchemy import MetaData, create_engine
 engine = create_engine('postgresql://test:123456@localhost/test1', pool_size=5, max_overflow=-1)
-
 
 # simple test
 connection = engine.connect()
@@ -21,6 +20,8 @@ connection.close()
 
 """create objects using sqlalchemy's reflection; attribute is what is returned by create_engine()"""
 def introspect_sqlalchemy(engine):
+	# http://docs.sqlalchemy.org/en/latest/core/schema.html#reflecting-all-tables-at-once
+	# read this: http://effbot.org/zone/simple-top-down-parsing.htm
 	# fun: http://www.incurlybraces.com/convert-underscored-names-camel-case-python.html
 	# may have a method that does just that, if someone wants it
 	meta = MetaData()
@@ -47,8 +48,8 @@ def introspect_sqlalchemy(engine):
 				columnclass = TextColumn
 			columnobject = columnclass()
 			## Adapt PrimaryKey/ForeinKey
-			if column_sqla.primary_key:
-				columnobject = PrimaryKey(columnobject)
+			#if column_sqla.primary_key:
+			#	columnobject = PrimaryKey(columnobject)
 			if column_sqla.foreign_keys:
 				assert(len(column_sqla.foreign_keys) == 1) # wonder why every column stores a set() of foreign_keys in sqlalchemy??
 				pkcol_sqla = column_sqla.foreign_keys.pop().column
