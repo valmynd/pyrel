@@ -2,6 +2,7 @@
 
 # writing metaclasses in cython led to segfaults
 # TODO: try with newer versions of cython (last tried with 0.14.x)
+# WISHLIST for cython: let metaclasses manipulate cclass-generatian
 __author__ = "C.Wilhelm"
 __license__ = "AGPL v3"
 

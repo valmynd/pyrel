@@ -35,7 +35,7 @@ opstring_mapping = { "__and__" : " and ", "__or__" : " or ",  "__lt__" : " < ", 
 
 # _Operand shall contain all operators relevant for Column objects
 @cython.cclass
-class _Operand:
+class _Operand(object):
 	def __or__(self, other): # a | b
 		# because the | operator has the highest operator precedence, the
 		# operators need to be put into brackets, like this: i | (i < i)
@@ -80,7 +80,7 @@ class Expression(_Operand):
 		return "%s%s%s" % (self._left_operand, opstring_mapping[self._operator], self._right_operand)
 
 @cython.cclass
-class Database:
+class Database(object):
 	# readonly doesn't apply for cython-access
 	_name = cython.declare(unicode) #typedef...
 	_models = cython.declare(list) # see models()
@@ -115,10 +115,10 @@ class Database:
 # note on _Command: think of it as prepared statement
 # only the way things are stored should be optimized
 @cython.cclass
-class _Command:
+class _Command(object):
 	## attributes that don't need to be copied:
 	# _prepared_statement: need to be regenerated if anything changed (see command_changed)
-	_prepared_statement = cython.declare(unicode) #typedef...
+	prepared_statement = cython.declare(unicode) #typedef...
 	# general attributes for common queries:
 	#  all subclasses need to be able to be converted into each other
 	#  back and forth, so any information must be avaiable, even if
@@ -131,8 +131,8 @@ class _Command:
 	values_commit = cython.declare(list)
 	values_where = cython.declare(list)
 	values_having = cython.declare(list)
-	where_expr = cython.declare(Expression)
-	having_expr = cython.declare(Expression)
+	where_expr = cython.declare(object)
+	having_expr = cython.declare(object)
 	offset_num = cython.declare(cython.int)
 	limit_num = cython.declare(cython.int)
 	def __cinit__(self):
@@ -203,7 +203,7 @@ class _Command:
 	def command_changed(self):
 		# must be called by every method that has an influence on the prepared statement,
 		# or otherwise calling that method may have no effect at all!
-		self._prepared_statement = ""
+		self.prepared_statement = ""
 		return self
 	# Subclasses shall implement: values(), __str__()
 
@@ -315,7 +315,7 @@ class _Column(_Operand):
 		return self._name
 	#def __repr__(self):
 	#	return "<%s %s.%s>" % (self.__class__.__name__, self._model._name, self._name)
-#@cython.cclass # FIXME: DOESN'T WORK
+#@cython.cclass # FIXME: DOESN'T WORK (cython bug)
 class TextColumn(_Column):
 	pass
 #@cython.cclass
