@@ -46,7 +46,7 @@ class FieldSetMeta(type):
 		pass
 
 """One Form can have multiple FieldSets. A Form is a FieldSet.
-While Form classes exists once globally, they spawn a distinct object per request"""
+While Form classes exist once globally, they spawn a distinct object per request"""
 class FieldSet(_View):# python3: Form(list, metaclass=FieldSetMeta):
 	__metaclass__ = FieldSetMeta
 	__labelstr__ = "" # label for HeaderHolder(Form) or FieldSet-label
@@ -296,34 +296,36 @@ class Form(FieldSet):
 		formroot.append(fieldset)
 		return formroot
 
-###########################################################################
+########################################################################
 ######################## _Field Classes ################################
-######################################################################## */
+##################################################################### */
 
 """
+The following should work:
 bo = BooleanColumn()
 CheckBox(bo).render()
 """
-
-#class _Field(object):# FieldInterface, as this is the brich between Data and EndUser
 class _Field(object):
 	"""abstract class for formular fields, it shall be only used to subclass it"""
-	_instantiation_count = 0 # SYNC W/ BaseColumn
-	_handled_by_fieldset = True # False for HiddenField and Submit-Buttons
-	_hint = "" # TODO: hint(), default(), readonly()/ disabled()
-	#attrib = None # will hold all html-attributes in an OrderedDict
+	@property
+	def _name(self):
+		"""_name is internally handled as part of attrib - thut it does not get overridden if name does exist!"""
+		return self.attrib.get("name","")
+	@_name.setter
+	def _name(self,value):
+		self.attrib.__setitem__("name",value) if "name" not in self.attrib else None
+	@_name.setter
+	def _name(self):
+		self.attrib.__delitem__("name")
+	# attrib = None # will hold all html-attributes in an OrderedDict
 	# options are handled through the options() method
-	#validators = [] # will hold all validators, will be the same as from columns and handled only there
+	# validators = [] # will hold all validators, will be the same as from columns and handled only there
 	# formfield-relevant information needed in templates
-	#multiline = False # for TextArea, this will be True, needed in templates TODO: ashure
-	#triminput = False # True at least for Email and Password
+	# multiline = False # for TextArea, this will be True, needed in templates (TODO)
+	# triminput = False # True at least for Email and Password
 	_validators = [] # while a list is easy to override, the object will hold a local dict (!)
-	_name = property(
-		fget = lambda self:self.attrib.get("name",""),
-		fset = lambda self,value:self.attrib.__setitem__("name",value) if "name" not in self.attrib else None,
-		fdel = lambda self:self.attrib.__delitem__("name"),
-		doc = "_name property is internally handled as part of attrib - does not override if name does exist!!"
-	)
+	_hint = "" # TODO: hint(), default(), readonly()/ disabled()
+	_handled_by_fieldset = True # False for HiddenField and Submit-Buttons
 	def __init__(self, column = None, **attrib):
 		self._validators = dict((v._name, v) for v in self.__class__._validators)
 		self._form = None # assigned by bind_form()
@@ -331,8 +333,8 @@ class _Field(object):
 		self.attrib = attrib
 		self._column = column
 		if column is not None:
-			if not hasattr(column, "_pytype"):#isinstance(column, BaseColumn):
-				raise TypeError("_Field.__init__(): first parameter must be an instance of BaseColumn or None")
+			if not hasattr(column, "_pytype"):#isinstance(column, _Column):
+				raise TypeError("first parameter must be an instance of _Column or None")
 			self._name = column._name
 			if column._choices is not None:
 				self.options(column._choices) # bootstrap options
@@ -342,14 +344,11 @@ class _Field(object):
 		self.labelstr = ""
 		self.labelleft = True
 		# Field is newly created, some things aren't needed on convertion
-		self._instantiation_count = _Field._instantiation_count # held actual value locally
-		_Field._instantiation_count += 1 # increment class-wide attribute for next instantiation
-		#etree.ElementBase.__init__(self, attrib=attrib)
 		# errors, hints, success are handled in the Form-class
 		# by default, value will be taken from Form._htparams, ignoring attrib["value"]
 		# _init() is called from bind_form(), so the formCLASS will be known
 	def _value_py(self, formobj):
-		# _values needs are to be prepared via clean()
+		# _values needs are to be prepared via clean() # TODO: assert(...)
 		return formobj._values.get(self._name)
 	def _value_str(self, formobj):
 		# usualy forwarded to Column._value_str()
@@ -444,16 +443,16 @@ class _Field(object):
 		if "name" not in self.attrib:
 			self._name = newname
 		return self"""
-	def options(self, options):
+	def options(self, options = None):
 		"""options can be
 			a Model object or a Select (will be taken care of in _options())
 			list of {label:value} assignments like {'Apples': 1, 'Oranges': 2} / [("Apples",1),("Oranges",2)]
 			an OrderedDict object - note that it is dict[value] = key!
 		by default, boolean Columns have those two options: [("Yes",True),("No",False)]
 		-> You might overwrite these options to e.g. [("Active",True),("Inactive",False)]"""
-		self.__optionsobj = options
-		return self
-	def _options(self):
+		if options is not None:
+			self.__optionsobj = options
+			return self
 		# __optionsobj gets in shape HERE, thus staying in sync with
 		# database changes and preventing overhead if not needed
 		# __optionsobj can be either a Table, a Select obj or something
@@ -529,17 +528,15 @@ class _Field(object):
 	def _element(self, formobj):
 		# return specific element, e.g. <input/>
 		raise NotImplementedError(self.__class__.__name__)
-	def _init(self):
+	def _init(self): # CALLED BY bind_form()
 		"""
 		as this method shall be overridden instead of __init__(), thus attributes may get adjusted here
 		intended to be overidden by subclass, some may want to overwrite at least self.attrib["type"]
 		this method should be called from all render() and _element() methods of all subclasses (except HiddenField)
-		# CALLED BY bind_form()
 		"""
 		raise NotImplementedError(self.__class__.__name__)
 
 #class NullField(_Field): # This class can be used to define a Column or an existing Field not to be rendered
-
 class TextField(_Field):
 	#_inputtype =  # classes that derive from TextField will differ in that, e.g. "password" for PasswordField
 	#def __init__(self, column = None, **attributes):
@@ -908,8 +905,6 @@ class SubmitButton(_Field):
 		doc="labelstr property is internally handled as part of attrib"
 	)
 	def __init__(self, **attrib):
-		self._instantiation_count = _Field._instantiation_count # held actual value locally
-		_Field._instantiation_count += 1 # increment class-wide attribute for next instantiation
 		self.attrib = attrib
 	def __element__(self, formobj):
 		self.attrib.update({"type":"submit", "class":"primaryAction"})
@@ -918,13 +913,6 @@ class SubmitButton(_Field):
 ###########################################################################
 ###################### Other, Special Fields ##############################
 ######################################################################## */
-
 # Spinner and Slider require upper- and lowerlimit been set (which shall be also the case in case of self.__optionsobj == None?)
 # class Spinner(IntegerField): # dropped in favor of IntegerField / FloatField / etc
 
-class Slider(IntegerField):
-	"""requires min and max to be set"""
-	def _init(self):
-		if self._column is None or self._column.min is None or self._column.max is None:
-			raise Exception(type(self).__name__ + " requires min and max to be set (within BaseColmn)")
-		self.attrib["type"] = "range"
